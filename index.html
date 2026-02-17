@@ -1,24 +1,44 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- A-Frame -->
   <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js"></script>
+
+  <!-- MindAR -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.4/dist/mindar-image-aframe.prod.js"></script>
 </head>
 
-<body>
-  <a-scene 
-    mindar-image="imageTargetSrc: targets.mind;"
+<body style="margin:0; overflow:hidden;">
+
+  <a-scene
+    mindar-image="imageTargetSrc: ./targets.mind;"
+    color-space="sRGB"
     embedded
-    vr-mode-ui="enabled: false">
+    device-orientation-permission-ui="enabled: true"
+    vr-mode-ui="enabled: false"
+    renderer="colorManagement: true, physicallyCorrectLights">
 
     <a-assets>
-      <video id="vid" src="video.mp4" loop="true" crossorigin="anonymous"></video>
+      <video
+        id="vid"
+        src="./video.mp4"
+        preload="auto"
+        loop
+        autoplay
+        muted
+        playsinline
+        webkit-playsinline
+        crossorigin="anonymous">
+      </video>
     </a-assets>
 
-    <a-camera position="0 0 0"></a-camera>
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
     <a-entity mindar-image-target="targetIndex: 0">
-      <a-video 
+      <a-video
         src="#vid"
         width="1"
         height="0.6"
@@ -30,11 +50,14 @@
 
   <script>
     const sceneEl = document.querySelector('a-scene');
+    const video = document.querySelector('#vid');
+
     sceneEl.addEventListener('targetFound', () => {
-      document.querySelector('#vid').play();
+      video.play();
     });
+
     sceneEl.addEventListener('targetLost', () => {
-      document.querySelector('#vid').pause();
+      video.pause();
     });
   </script>
 
