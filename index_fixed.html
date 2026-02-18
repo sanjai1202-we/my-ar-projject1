@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image AR Video</title>
+
+  <!-- ES Module importmap — required for MindAR v1.2.0+ with Three.js -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+    }
+  }
+  </script>
+
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    #status {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-family: sans-serif;
+      font-size: 13px;
+      z-index: 999;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="status">Loading AR...</div>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { MindARThree } from 'mindar-image-three';
+
+  const statusEl = document.getElementById('status');
+
+  const mindarThree = new MindARThree({
+    container: document.body,
+    imageTargetSrc: './targets.mind'
+  });
+
+  const { renderer, scene, camera } = mindarThree;
+
+  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+  scene.add(light);
+
+  // Video overlay on target
+  const video = document.createElement('video');
+  video.src = './video.mp4';
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.crossOrigin = 'anonymous';
+
+  const texture = new THREE.VideoTexture(video);
+  const geometry = new THREE.PlaneGeometry(1, 0.6);
+  const material = new THREE.MeshBasicMaterial({ map: texture });
+  const plane = new THREE.Mesh(geometry, material);
+
+  const anchor = mindarThree.addAnchor(0);
+  anchor.group.add(plane);
+
+  anchor.onTargetFound = () => {
+    video.play();
+    statusEl.textContent = '🎯 Target found — playing video';
+  };
+
+  anchor.onTargetLost = () => {
+    video.pause();
+    statusEl.textContent = '👁 Point camera at the image target';
+  };
+
+  try {
+    statusEl.textContent = '📷 Starting camera...';
+    await mindarThree.start();
+    statusEl.textContent = '👁 Point camera at the image target';
+  } catch (err) {
+    statusEl.textContent = '❌ Error: ' + err.message;
+    console.error('MindAR error:', err);
+  }
+
+  renderer.setAnimationLoop(() => {
+    renderer.render(scene, camera);
+  });
+</script>
+
+</body>
+</html>
