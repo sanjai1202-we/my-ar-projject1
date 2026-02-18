@@ -1,25 +1,53 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  body { margin:0; overflow:hidden; }
-  video { width:100%; height:100%; object-fit:cover; }
-</style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Camera Test</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+    }
+    video {
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+    }
+    #error {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      background: red;
+      padding: 10px 20px;
+      border-radius: 8px;
+      display: none;
+    }
+  </style>
 </head>
 <body>
+
+<video id="camera" autoplay playsinline></video>
+<div id="error"></div>
 
 <script>
 async function startCamera() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    const video = document.createElement('video');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "environment"  // back camera
+      },
+      audio: false
+    });
+
+    const video = document.getElementById("camera");
     video.srcObject = stream;
-    video.autoplay = true;
-    video.playsInline = true;
-    document.body.appendChild(video);
-  } catch (error) {
-    alert("Camera failed: " + error);
+
+  } catch (err) {
+    const errorDiv = document.getElementById("error");
+    errorDiv.innerText = "Camera Error: " + err.message;
+    errorDiv.style.display = "block";
   }
 }
 
