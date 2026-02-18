@@ -1,108 +1,119 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WebAR Experience</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>WebAR Experience</title>
 
-  <!-- A-Frame -->
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  <!-- MindAR -->
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  background: black;
+  font-family: Arial, sans-serif;
+}
 
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
-    }
+.instruction-container {
+  position: fixed;
+  bottom: 30px;
+  width: 100%;
+  text-align: center;
+  z-index: 1000;
+  pointer-events: none;
+}
 
-    .instruction-container {
-      position: fixed;
-      bottom: 30px;
-      width: 100%;
-      text-align: center;
-      z-index: 1000;
-      pointer-events: none;
-    }
-
-    .instruction-text {
-      font-size: 1rem;
-      color: #4facfe;
-      background: rgba(0, 0, 0, 0.8);
-      padding: 10px 20px;
-      border-radius: 10px;
-      border: 1px solid #4facfe;
-      display: inline-block;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-  </style>
+.instruction-text {
+  font-size: 1rem;
+  color: #4facfe;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1px solid #4facfe;
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+</style>
 </head>
 
 <body>
 
-  <!-- Instruction Text -->
-  <div class="instruction-container" id="instruction-container">
-    <div class="instruction-text">
-      Point camera at image
-    </div>
+<div class="instruction-container" id="instruction-container">
+  <div class="instruction-text">
+    Point camera at image
   </div>
+</div>
 
-  <!-- AR Scene -->
-  <a-scene
-    mindar-image="imageTargetSrc: ./targets.mind; uiScanning: no; uiLoading: no;"
-    color-space="sRGB"
-    renderer="colorManagement: true, physicallyCorrectLights: false"
-    vr-mode-ui="enabled: false"
-    device-orientation-permission-ui="enabled: false">
+<a-scene
+  mindar-image="imageTargetSrc: ./targets.mind; uiScanning: no; uiLoading: no;"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  renderer="colorManagement: true"
+  color-space="sRGB">
 
-    <a-assets>
-      <!-- IMPORTANT: Correct video path -->
-      <video id="ar-video"
-        src="./video.mp4"
-        preload="auto"
-        loop
-        playsinline
-        webkit-playsinline
-        crossorigin="anonymous">
-      </video>
-    </a-assets>
+  <a-assets>
+    <video id="ar-video"
+      src="./video.mp4"
+      preload="auto"
+      loop
+      playsinline
+      webkit-playsinline
+      crossorigin="anonymous">
+    </video>
+  </a-assets>
 
-    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <!-- Target -->
-    <a-entity mindar-image-target="targetIndex: 0" id="target-entity">
+  <a-entity mindar-image-target="targetIndex: 0" id="target-entity">
+    <a-video
+      src="#ar-video"
+      width="1"
+      height="0.5625"
+      position="0 0 0">
+    </a-video>
+  </a-entity>
 
-      <!-- 3D Video Plane -->
-      <a-video
-        src="#ar-video"
-        width="1"
-        height="0.5625"
-        position="0 0 0">
-      </a-video>
+</a-scene>
 
-    </a-entity>
+<script>
+const video = document.getElementById('ar-video');
+const target = document.getElementById('target-entity');
+const instruction = document.getElementById('instruction-container');
 
-  </a-scene>
+let targetVisible = false;
 
-  <script>
-    const video = document.getElementById('ar-video');
-    const target = document.getElementById('target-entity');
-    const instruction = document.getElementById('instruction-container');
+// IMPORTANT: start muted (required for mobile)
+video.muted = true;
+video.setAttribute("playsinline", "");
+video.setAttribute("webkit-playsinline", "");
 
-    target.addEventListener('targetFound', () => {
-      instruction.style.display = "none";
-      video.play().catch(() => {});
-    });
+// When image found
+target.addEventListener('targetFound', () => {
+  targetVisible = true;
+  instruction.style.display = "none";
+  video.play().catch(() => {});
+});
 
-    target.addEventListener('targetLost', () => {
-      instruction.style.display = "block";
-      video.pause();
-    });
+// When image lost
+target.addEventListener('targetLost', () => {
+  targetVisible = false;
+  instruction.style.display = "block";
+  video.pause();
+});
 
-  </script>
+// Unlock audio on user tap
+document.addEventListener("click", () => {
+  if (targetVisible) {
+    video.muted = false;
+    video.play().catch(() => {});
+  }
+});
+</script>
 
 </body>
 </html>
