@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>WebAR Experience</title>
+<title>WebAR Transparent</title>
 
 <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -14,8 +14,16 @@ html, body {
   overflow: hidden;
   width: 100%;
   height: 100%;
-  background: black;
-  font-family: Arial, sans-serif;
+  background: transparent;
+}
+
+a-scene {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: transparent !important;
 }
 
 .instruction-container {
@@ -23,20 +31,19 @@ html, body {
   bottom: 30px;
   width: 100%;
   text-align: center;
-  z-index: 1000;
+  z-index: 999;
   pointer-events: none;
 }
 
 .instruction-text {
   font-size: 1rem;
   color: #4facfe;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.7);
   padding: 10px 20px;
   border-radius: 10px;
   border: 1px solid #4facfe;
   display: inline-block;
   text-transform: uppercase;
-  letter-spacing: 1px;
 }
 </style>
 </head>
@@ -53,7 +60,7 @@ html, body {
   mindar-image="imageTargetSrc: ./targets.mind; uiScanning: no; uiLoading: no;"
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: false"
-  renderer="colorManagement: true"
+  renderer="colorManagement: true; alpha: true;"
   color-space="sRGB">
 
   <a-assets>
@@ -69,7 +76,7 @@ html, body {
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-  <a-entity mindar-image-target="targetIndex: 0" id="target-entity">
+  <a-entity mindar-image-target="targetIndex: 0" id="target">
     <a-video
       src="#ar-video"
       width="1"
@@ -82,33 +89,33 @@ html, body {
 
 <script>
 const video = document.getElementById('ar-video');
-const target = document.getElementById('target-entity');
+const target = document.getElementById('target');
 const instruction = document.getElementById('instruction-container');
 
-let targetVisible = false;
+let visible = false;
 
-// IMPORTANT: start muted (required for mobile)
+// Mobile autoplay fix
 video.muted = true;
 video.setAttribute("playsinline", "");
 video.setAttribute("webkit-playsinline", "");
 
-// When image found
+// When image detected
 target.addEventListener('targetFound', () => {
-  targetVisible = true;
+  visible = true;
   instruction.style.display = "none";
   video.play().catch(() => {});
 });
 
 // When image lost
 target.addEventListener('targetLost', () => {
-  targetVisible = false;
+  visible = false;
   instruction.style.display = "block";
   video.pause();
 });
 
-// Unlock audio on user tap
+// Unlock audio after tap
 document.addEventListener("click", () => {
-  if (targetVisible) {
+  if (visible) {
     video.muted = false;
     video.play().catch(() => {});
   }
