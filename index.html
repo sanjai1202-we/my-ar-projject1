@@ -88,44 +88,21 @@
   </a-scene>
 
   <script>
-    const video = document.querySelector("#ar-video");
-const target = document.querySelector("#target");
-const startBtn = document.querySelector("#start-btn");
-const overlay = document.querySelector("#start-overlay");
-const sceneEl = document.querySelector("a-scene");
+    const video = document.getElementById('ar-video');
+    const target = document.getElementById('target-entity');
+    const instruction = document.getElementById('instruction-container');
 
-let targetVisible = false;
+    target.addEventListener('targetFound', () => {
+      instruction.style.display = "none";
+      video.play().catch(() => {});
+    });
 
-// IMPORTANT: Always start muted
-video.muted = true;
-video.setAttribute("playsinline", "");
-video.setAttribute("webkit-playsinline", "");
+    target.addEventListener('targetLost', () => {
+      instruction.style.display = "block";
+      video.pause();
+    });
 
-// Start AR only after user click
-startBtn.addEventListener("click", async () => {
-  overlay.style.display = "none";
-  await sceneEl.systems["mindar-image-system"].start();
-});
-
-// When image detected
-target.addEventListener("targetFound", () => {
-  targetVisible = true;
-  video.play().catch(() => {});
-});
-
-// When image lost
-target.addEventListener("targetLost", () => {
-  targetVisible = false;
-  video.pause();
-});
-
-// VERY IMPORTANT: Enable audio ONLY after user tap AND target visible
-document.addEventListener("click", () => {
-  if (targetVisible) {
-    video.muted = false;
-    video.play().catch(() => {});
-  }
-});
   </script>
+
 </body>
 </html>
