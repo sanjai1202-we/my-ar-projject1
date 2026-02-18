@@ -1,44 +1,65 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AR Video</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>AR Video</title>
 
-  <!-- A-Frame -->
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  <!-- MindAR -->
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    background: black;
+  }
 
-  <style>
-    body { margin: 0; overflow: hidden; }
+  a-scene {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+  }
 
-    #start-btn {
-      position: fixed;
-      bottom: 40px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 12px 25px;
-      background: black;
-      color: white;
-      border-radius: 10px;
-      font-size: 16px;
-      border: none;
-      z-index: 999;
-    }
-  </style>
+  #start-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+  }
+
+  #start-btn {
+    padding: 15px 30px;
+    font-size: 18px;
+    border: none;
+    border-radius: 10px;
+    background: white;
+    color: black;
+  }
+</style>
 </head>
 
 <body>
 
-<button id="start-btn">Start AR</button>
+<div id="start-overlay">
+  <button id="start-btn">Start AR</button>
+</div>
 
 <a-scene
   mindar-image="imageTargetSrc: ./targets.mind;"
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: false"
-  renderer="colorManagement: true, physicallyCorrectLights: false"
-  embedded
+  renderer="colorManagement: true"
   color-space="sRGB">
 
   <a-assets>
@@ -67,33 +88,34 @@
 </a-scene>
 
 <script>
-  const video = document.querySelector("#ar-video");
-  const target = document.querySelector("#target");
-  const startBtn = document.querySelector("#start-btn");
-  const sceneEl = document.querySelector("a-scene");
+const video = document.querySelector("#ar-video");
+const target = document.querySelector("#target");
+const startBtn = document.querySelector("#start-btn");
+const overlay = document.querySelector("#start-overlay");
+const sceneEl = document.querySelector("a-scene");
 
-  video.muted = true; // Required for autoplay
+video.muted = true;
 
-  // Start AR only after user click
-  startBtn.addEventListener("click", async () => {
-    startBtn.style.display = "none";
-    await sceneEl.systems["mindar-image-system"].start();
-  });
+// Start AR properly on both platforms
+startBtn.addEventListener("click", async () => {
+  overlay.style.display = "none";
+  await sceneEl.systems["mindar-image-system"].start();
+});
 
-  // When image detected
-  target.addEventListener("targetFound", () => {
-    video.play();
-  });
+// Play when detected
+target.addEventListener("targetFound", () => {
+  video.play();
+});
 
-  // When image lost
-  target.addEventListener("targetLost", () => {
-    video.pause();
-  });
+// Pause when lost
+target.addEventListener("targetLost", () => {
+  video.pause();
+});
 
-  // Enable sound after user taps screen
-  document.addEventListener("click", () => {
-    video.muted = false;
-  });
+// Enable sound after any tap
+document.addEventListener("click", () => {
+  video.muted = false;
+});
 </script>
 
 </body>
