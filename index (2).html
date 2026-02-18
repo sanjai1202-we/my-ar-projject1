@@ -2,56 +2,65 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Camera Test</title>
+  <title>Image AR Video</title>
+
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+
+  <!-- MindAR -->
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+
   <style>
-    body {
-      margin: 0;
-      background: black;
-    }
-    video {
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-    }
-    #error {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: white;
-      background: red;
-      padding: 10px 20px;
-      border-radius: 8px;
-      display: none;
-    }
+    body { margin: 0; overflow: hidden; }
   </style>
 </head>
+
 <body>
 
-<video id="camera" autoplay playsinline></video>
-<div id="error"></div>
-
 <script>
-async function startCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "environment"  // back camera
-      },
-      audio: false
-    });
+document.addEventListener("DOMContentLoaded", async () => {
 
-    const video = document.getElementById("camera");
-    video.srcObject = stream;
+  const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+    container: document.body,
+    imageTargetSrc: './targets.mind'
+  });
 
-  } catch (err) {
-    const errorDiv = document.getElementById("error");
-    errorDiv.innerText = "Camera Error: " + err.message;
-    errorDiv.style.display = "block";
-  }
-}
+  const {renderer, scene, camera} = mindarThree;
 
-startCamera();
+  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+  scene.add(light);
+
+  // Create video element
+  const video = document.createElement('video');
+  video.src = './video.mp4';
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.crossOrigin = "anonymous";
+
+  const texture = new THREE.VideoTexture(video);
+  const geometry = new THREE.PlaneGeometry(1, 0.6);
+  const material = new THREE.MeshBasicMaterial({map: texture});
+  const plane = new THREE.Mesh(geometry, material);
+
+  const anchor = mindarThree.addAnchor(0);
+  anchor.group.add(plane);
+
+  anchor.onTargetFound = () => {
+    video.play();
+  };
+
+  anchor.onTargetLost = () => {
+    video.pause();
+  };
+
+  await mindarThree.start();
+
+  renderer.setAnimationLoop(() => {
+    renderer.render(scene, camera);
+  });
+
+});
 </script>
 
 </body>
