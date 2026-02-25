@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>WebAR Transparent</title>
+<title>WebAR Auto Video Ratio</title>
 
 <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -68,6 +68,7 @@ a-scene {
       src="./video.mp4"
       preload="auto"
       loop
+      muted
       playsinline
       webkit-playsinline
       crossorigin="anonymous">
@@ -78,9 +79,8 @@ a-scene {
 
   <a-entity mindar-image-target="targetIndex: 0" id="target">
     <a-video
+      id="videoPlane"
       src="#ar-video"
-      width="1"
-      height="0.5625"
       position="0 0 0">
     </a-video>
   </a-entity>
@@ -91,29 +91,40 @@ a-scene {
 const video = document.getElementById('ar-video');
 const target = document.getElementById('target');
 const instruction = document.getElementById('instruction-container');
+const videoPlane = document.getElementById('videoPlane');
 
 let visible = false;
 
-// Mobile autoplay fix
-video.muted = true;
-video.setAttribute("playsinline", "");
-video.setAttribute("webkit-playsinline", "");
+/* AUTO ASPECT RATIO FIX */
+video.addEventListener("loadedmetadata", () => {
+  const ratio = video.videoWidth / video.videoHeight;
 
-// When image detected
+  if (ratio > 1) {
+    // Horizontal video
+    videoPlane.setAttribute("width", 1);
+    videoPlane.setAttribute("height", 1 / ratio);
+  } else {
+    // Vertical video
+    videoPlane.setAttribute("width", ratio);
+    videoPlane.setAttribute("height", 1);
+  }
+});
+
+/* When image detected */
 target.addEventListener('targetFound', () => {
   visible = true;
   instruction.style.display = "none";
   video.play().catch(() => {});
 });
 
-// When image lost
+/* When image lost */
 target.addEventListener('targetLost', () => {
   visible = false;
   instruction.style.display = "block";
   video.pause();
 });
 
-// Unlock audio after tap
+/* Mobile audio unlock */
 document.addEventListener("click", () => {
   if (visible) {
     video.muted = false;
