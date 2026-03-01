@@ -52,7 +52,7 @@ a-scene {
 
 <div class="instruction-container" id="instruction-container">
   <div class="instruction-text">
-    Point camera at image
+    Focus On Image
   </div>
 </div>
 
@@ -65,7 +65,7 @@ a-scene {
 
   <a-assets>
     <video id="ar-video"
-      src="./video.mp4"
+      src="./SDN Controller Framework.mp4"
       preload="auto"
       loop
       playsinline
