@@ -1,1 +1,0 @@
-# my-ar-projject1
