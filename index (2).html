@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>SDN AR</title>
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  width:100%; height:100%;
+  overflow:hidden;
+  background:#000;
+}
+
+/* Make the whole scene transparent so camera shows through */
+a-scene {
+  position:fixed !important;
+  top:0; left:0;
+  width:100vw !important;
+  height:100vh !important;
+  background: transparent !important;
+}
+
+/* MindAR injects a video element for camera - make sure it shows */
+video#mindar-video, .a-canvas {
+  background: transparent !important;
+}
+
+/* Scanner UI overlay */
+#scanner-ui {
+  position:fixed; inset:0; z-index:100;
+  pointer-events:none;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+}
+
+/* Scanning frame corners */
+.scan-frame {
+  width: 260px; height: 260px;
+  position: relative;
+}
+.corner {
+  position:absolute; width:36px; height:36px;
+  border-color:#4facfe; border-style:solid;
+}
+.corner.tl { top:0; left:0; border-width:4px 0 0 4px; border-radius:6px 0 0 0; }
+.corner.tr { top:0; right:0; border-width:4px 4px 0 0; border-radius:0 6px 0 0; }
+.corner.bl { bottom:0; left:0; border-width:0 0 4px 4px; border-radius:0 0 0 6px; }
+.corner.br { bottom:0; right:0; border-width:0 4px 4px 0; border-radius:0 0 6px 0; }
+
+/* Animated scan line */
+.scan-line {
+  position:absolute; left:8px; right:8px; height:2px;
+  background: linear-gradient(90deg, transparent, #4facfe, transparent);
+  animation: scanMove 2s linear infinite;
+  top:0;
+}
+@keyframes scanMove {
+  0%   { top: 8px; opacity:1; }
+  90%  { opacity:1; }
+  100% { top: calc(100% - 8px); opacity:0; }
+}
+
+/* Status text below frame */
+#status-box {
+  margin-top: 24px;
+  background:rgba(0,0,0,0.6);
+  border:1.5px solid #4facfe;
+  border-radius:30px;
+  padding:10px 22px;
+  color:#4facfe;
+  font-family:Arial,sans-serif;
+  font-size:0.85rem;
+  text-transform:uppercase;
+  letter-spacing:1px;
+  text-align:center;
+}
+
+/* Loading screen */
+#loading-screen {
+  position:fixed; inset:0; background:#000; z-index:9999;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  font-family:Arial,sans-serif; color:#fff;
+  gap:14px; padding:30px; text-align:center;
+}
+#loading-screen h2 { color:#4facfe; font-size:1.2rem; }
+#loading-screen p  { color:#888; font-size:0.82rem; line-height:1.6; }
+#load-bar-wrap { width:220px; height:8px; background:#222; border-radius:4px; overflow:hidden; }
+#load-bar { height:100%; width:0%; background:#4facfe; border-radius:4px; transition:width 0.4s; }
+#loading-msg { color:#aaa; font-size:0.8rem; }
+
+/* Error screen */
+#error-box {
+  display:none; position:fixed; inset:0; background:#000; z-index:9999;
+  flex-direction:column; align-items:center; justify-content:center;
+  font-family:Arial,sans-serif; color:#fff;
+  gap:12px; padding:30px; text-align:center;
+}
+#error-box h2 { color:#ff5252; }
+#error-box p  { color:#aaa; font-size:0.85rem; line-height:1.6; }
+#retry-btn {
+  margin-top:10px; padding:12px 30px;
+  background:#4facfe; color:#000;
+  border:none; border-radius:10px;
+  font-size:1rem; font-weight:bold; cursor:pointer;
+}
+
+/* Found state — hide scanner frame when tracking */
+.tracking .scan-frame { opacity:0; transition: opacity 0.3s; }
+.tracking #status-box { border-color:#00e676; color:#00e676; }
+</style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loading-screen">
+  <h2>🔄 Loading AR...</h2>
+  <div id="load-bar-wrap"><div id="load-bar"></div></div>
+  <div id="loading-msg">Starting camera...</div>
+  <p>This may take 10–20 seconds<br>on mobile. Please wait.</p>
+</div>
+
+<!-- Error Screen -->
+<div id="error-box">
+  <h2>⚠️ Camera Error</h2>
+  <p>Could not start the camera or load AR.<br><br>
+  Make sure you:<br>
+  ✅ Allowed camera permission<br>
+  ✅ Are using HTTPS (github.io)<br>
+  ✅ Using Chrome or Safari</p>
+  <button id="retry-btn" onclick="location.reload()">🔄 Retry</button>
+</div>
+
+<!-- Scanner overlay UI -->
+<div id="scanner-ui">
+  <div class="scan-frame">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div class="scan-line"></div>
+  </div>
+  <div id="status-box">📷 Point camera at textbook page</div>
+</div>
+
+<!-- AR Scene -->
+<a-scene
+  id="scene"
+  mindar-image="imageTargetSrc: ./targets.mind;
+                uiScanning: no;
+                uiLoading: no;
+                filterMinCF: 0.001;
+                filterBeta: 1000;
+                warmupTolerance: 5;
+                missTolerance: 10;"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  renderer="colorManagement: true; alpha: true;"
+  color-space="sRGB"
+  embedded>
+
+  <a-assets timeout="60000">
+    <video id="vid"
+      src="./video.mp4"
+      preload="auto"
+      loop muted playsinline
+      webkit-playsinline
+      crossorigin="anonymous">
+    </video>
+  </a-assets>
+
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+  <!-- Target 0 -->
+  <a-entity mindar-image-target="targetIndex: 0" id="target0">
+    <a-video src="#vid" width="1" height="0.5625" position="0 0 0.001"></a-video>
+  </a-entity>
+
+  <!-- Target 1 -->
+  <a-entity mindar-image-target="targetIndex: 1" id="target1">
+    <a-video src="#vid" width="1" height="0.5625" position="0 0 0.001"></a-video>
+  </a-entity>
+
+</a-scene>
+
+<script>
+const vid        = document.getElementById('vid');
+const target0    = document.getElementById('target0');
+const target1    = document.getElementById('target1');
+const statusBox  = document.getElementById('status-box');
+const scannerUI  = document.getElementById('scanner-ui');
+const loadScreen = document.getElementById('loading-screen');
+const loadBar    = document.getElementById('load-bar');
+const loadMsg    = document.getElementById('loading-msg');
+const errorBox   = document.getElementById('error-box');
+
+// ── Animated loading steps ─────────────────────────────────
+const steps = [
+  { pct:15, msg:'Loading MindAR...' },
+  { pct:35, msg:'Loading video...' },
+  { pct:55, msg:'Loading target data...' },
+  { pct:75, msg:'Starting camera...' },
+  { pct:88, msg:'Almost ready...' },
+];
+let stepIdx = 0;
+const fakeLoad = setInterval(() => {
+  if (stepIdx < steps.length) {
+    loadBar.style.width = steps[stepIdx].pct + '%';
+    loadMsg.textContent  = steps[stepIdx].msg;
+    stepIdx++;
+  }
+}, 1500);
+
+// ── 30s timeout → show error ───────────────────────────────
+const arTimeout = setTimeout(() => {
+  clearInterval(fakeLoad);
+  loadScreen.style.display = 'none';
+  errorBox.style.display   = 'flex';
+}, 30000);
+
+// ── AR Ready → hide loader, show camera ───────────────────
+document.getElementById('scene').addEventListener('arReady', () => {
+  clearInterval(fakeLoad);
+  clearTimeout(arTimeout);
+  loadBar.style.width = '100%';
+  loadMsg.textContent = '✅ Ready!';
+
+  // Make body + canvas transparent so real camera shows through
+  document.body.style.background = 'transparent';
+  const canvas = document.querySelector('.a-canvas');
+  if (canvas) canvas.style.background = 'transparent';
+
+  setTimeout(() => { loadScreen.style.display = 'none'; }, 500);
+});
+
+// ── AR Error ───────────────────────────────────────────────
+document.getElementById('scene').addEventListener('arError', () => {
+  clearInterval(fakeLoad);
+  clearTimeout(arTimeout);
+  loadScreen.style.display = 'none';
+  errorBox.style.display   = 'flex';
+});
+
+// ── iOS/Android autoplay unlock ────────────────────────────
+vid.muted = true;
+let unlocked = false;
+function unlock() {
+  if (unlocked) return; unlocked = true;
+  vid.play().then(() => { vid.pause(); vid.currentTime = 0; }).catch(() => {});
+}
+document.addEventListener('touchstart', unlock, { once: true });
+document.addEventListener('click',      unlock, { once: true });
+
+// ── Play video ─────────────────────────────────────────────
+function playVideo() {
+  scannerUI.classList.add('tracking');
+  statusBox.textContent = '▶️ Playing...';
+  vid.currentTime = 0;
+  vid.play().catch(() => {
+    vid.muted = true;
+    vid.play().catch(() => {});
+  });
+}
+
+// ── Pause video ────────────────────────────────────────────
+function pauseVideo() {
+  scannerUI.classList.remove('tracking');
+  statusBox.textContent = '📷 Point camera at textbook page';
+  vid.pause();
+}
+
+target0.addEventListener('targetFound', playVideo);
+target0.addEventListener('targetLost',  pauseVideo);
+target1.addEventListener('targetFound', playVideo);
+target1.addEventListener('targetLost',  pauseVideo);
+
+// ── Tap to unmute ──────────────────────────────────────────
+document.addEventListener('click', () => {
+  if (!vid.paused) vid.muted = false;
+});
+</script>
+</body>
+</html>
