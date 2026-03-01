@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<title>SDN AR Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif;}
+
+#camera{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;}
+#ocr-canvas{display:none;}
+
+/* ── AR Video Overlay ── */
+#ar-overlay{
+  position:fixed;z-index:50;display:none;
+  border-radius:12px;overflow:hidden;
+  box-shadow:0 0 0 3px #00e676,0 0 30px rgba(0,230,118,0.35);
+  transition:opacity 0.3s,transform 0.3s;
+  flex-direction:column;
+}
+#ar-video{width:100%;flex:1;object-fit:cover;display:block;background:#000;}
+
+/* ── Video Controls Bar ── */
+#controls{
+  width:100%;background:rgba(0,0,0,0.88);
+  display:flex;flex-direction:column;
+  padding:6px 8px 8px;gap:6px;
+  pointer-events:all;
+}
+
+/* Progress bar */
+#progress-wrap{
+  width:100%;height:18px;display:flex;align-items:center;cursor:pointer;padding:0 2px;
+}
+#progress-bg{
+  width:100%;height:4px;background:rgba(255,255,255,0.2);
+  border-radius:2px;position:relative;
+}
+#progress-fill{
+  height:100%;background:#00e676;border-radius:2px;width:0%;
+  pointer-events:none;
+}
+#progress-thumb{
+  position:absolute;top:50%;right:-5px;transform:translateY(-50%);
+  width:12px;height:12px;background:#fff;border-radius:50%;
+  box-shadow:0 0 4px rgba(0,0,0,0.5);pointer-events:none;
+}
+
+/* Time display */
+#time-row{
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:0.68rem;color:#aaa;padding:0 2px;
+}
+#time-display{color:#fff;font-size:0.7rem;}
+
+/* Main controls row */
+#btn-row{
+  display:flex;align-items:center;justify-content:space-between;gap:4px;
+}
+.ctrl-btn{
+  background:rgba(255,255,255,0.1);border:none;color:#fff;
+  border-radius:8px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:0.75rem;font-weight:bold;
+  transition:background 0.15s;flex:1;padding:7px 2px;
+  -webkit-tap-highlight-color:transparent;
+}
+.ctrl-btn:active{background:rgba(255,255,255,0.25);}
+.ctrl-btn.main{flex:1.4;background:rgba(0,230,118,0.2);color:#00e676;}
+.ctrl-btn.close-x{flex:0.8;background:rgba(255,82,82,0.2);color:#ff5252;}
+.ctrl-btn svg{width:16px;height:16px;fill:currentColor;}
+.ctrl-btn span{font-size:0.62rem;display:block;margin-top:1px;color:#aaa;}
+
+/* Speed selector */
+#speed-row{
+  display:flex;align-items:center;gap:5px;
+  font-size:0.68rem;color:#aaa;
+}
+#speed-row label{white-space:nowrap;}
+.spd-btn{
+  background:rgba(255,255,255,0.08);border:1px solid #333;
+  color:#aaa;border-radius:6px;padding:3px 7px;font-size:0.68rem;
+  cursor:pointer;transition:all 0.15s;-webkit-tap-highlight-color:transparent;
+}
+.spd-btn.active{background:rgba(0,230,118,0.2);border-color:#00e676;color:#00e676;font-weight:bold;}
+
+/* Volume row */
+#vol-row{
+  display:flex;align-items:center;gap:8px;font-size:0.68rem;color:#aaa;
+}
+#vol-slider{
+  flex:1;-webkit-appearance:none;height:3px;border-radius:2px;
+  background:rgba(255,255,255,0.2);outline:none;cursor:pointer;
+}
+#vol-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;
+  border-radius:50%;background:#fff;cursor:pointer;
+}
+
+/* ── Scan UI ── */
+#scan-box{
+  position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-58%);
+  width:86vw;height:50vw;max-width:380px;max-height:220px;
+  z-index:10;pointer-events:none;transition:opacity 0.4s;
+}
+#scan-box.hidden{opacity:0;}
+#scan-box .c{position:absolute;width:26px;height:26px;border-color:#4facfe;border-style:solid;}
+#scan-box .tl{top:0;left:0;border-width:4px 0 0 4px;border-radius:6px 0 0 0;}
+#scan-box .tr{top:0;right:0;border-width:4px 4px 0 0;border-radius:0 6px 0 0;}
+#scan-box .bl{bottom:0;left:0;border-width:0 0 4px 4px;border-radius:0 0 0 6px;}
+#scan-box .br{bottom:0;right:0;border-width:0 4px 4px 0;border-radius:0 0 6px 0;}
+#scan-line{
+  position:absolute;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,#4facfe,transparent);
+  box-shadow:0 0 6px #4facfe;animation:sw 2s ease-in-out infinite;
+}
+@keyframes sw{0%{top:0}50%{top:calc(100% - 2px)}100%{top:0}}
+
+/* ── Bottom scan UI ── */
+#bottom-ui{
+  position:fixed;bottom:0;left:0;right:0;z-index:60;
+  padding:10px 14px 20px;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  pointer-events:none;
+}
+#pills{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;max-width:340px;}
+.pill{background:rgba(0,0,0,0.75);border:1px solid #222;border-radius:20px;padding:3px 9px;font-size:0.66rem;color:#555;transition:all 0.4s;}
+.pill.lit{border-color:#00e676;color:#00e676;background:rgba(0,230,118,0.12);box-shadow:0 0 8px rgba(0,230,118,0.3);}
+#status{background:rgba(0,0,0,0.8);border:1.5px solid #4facfe;border-radius:24px;padding:8px 18px;color:#4facfe;font-size:0.8rem;text-align:center;max-width:280px;width:100%;transition:all 0.3s;}
+#status.found{border-color:#00e676;color:#00e676;}
+#status.reading{border-color:#ff9800;color:#ff9800;}
+
+/* ── Loading ── */
+#loading{position:fixed;inset:0;background:#000;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:30px;text-align:center;}
+#loading h2{color:#4facfe;font-size:1.1rem;}
+#loading p{color:#777;font-size:0.82rem;line-height:1.6;}
+#lbar-wrap{width:220px;height:8px;background:#1a1a1a;border-radius:4px;overflow:hidden;}
+#lbar{height:100%;width:0%;background:linear-gradient(90deg,#4facfe,#00e676);border-radius:4px;transition:width 0.5s;}
+#lmsg{color:#aaa;font-size:0.8rem;min-height:18px;}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <h2>📖 SDN AR Scanner</h2>
+  <div id="lbar-wrap"><div id="lbar"></div></div>
+  <div id="lmsg">Starting...</div>
+  <p>Point camera at the<br><strong style="color:#fff">SDN Controllers</strong> page</p>
+</div>
+
+<!-- Camera background -->
+<video id="camera" autoplay playsinline muted></video>
+<canvas id="ocr-canvas"></canvas>
+
+<!-- AR Video Overlay with controls -->
+<div id="ar-overlay">
+  <video id="ar-video" src="./video.mp4" playsinline webkit-playsinline></video>
+
+  <div id="controls">
+
+    <!-- Progress bar -->
+    <div id="progress-wrap" id="prog">
+      <div id="progress-bg">
+        <div id="progress-fill"></div>
+        <div id="progress-thumb"></div>
+      </div>
+    </div>
+
+    <!-- Time + mute -->
+    <div id="time-row">
+      <span id="time-display">0:00 / 0:00</span>
+      <span id="vol-row">
+        🔊
+        <input type="range" id="vol-slider" min="0" max="1" step="0.05" value="1">
+      </span>
+    </div>
+
+    <!-- Main buttons -->
+    <div id="btn-row">
+      <!-- Close -->
+      <button class="ctrl-btn close-x" onclick="stopVideo()">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        <span>Close</span>
+      </button>
+
+      <!-- -10s -->
+      <button class="ctrl-btn" onclick="seek(-10)">
+        <svg viewBox="0 0 24 24"><path d="M12.5 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3z"/><text x="8" y="15" font-size="7" fill="white" font-family="Arial">-10</text></svg>
+        <span>-10s</span>
+      </button>
+
+      <!-- Play/Pause -->
+      <button class="ctrl-btn main" id="playpause-btn" onclick="togglePlay()">
+        <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        <svg id="pause-icon" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        <span id="playpause-label">Play</span>
+      </button>
+
+      <!-- +10s -->
+      <button class="ctrl-btn" onclick="seek(10)">
+        <svg viewBox="0 0 24 24"><path d="M11.5 3a9 9 0 1 1-9 9h2a7 7 0 1 0 7-7V3z"/><text x="9" y="15" font-size="7" fill="white" font-family="Arial">+10</text></svg>
+        <span>+10s</span>
+      </button>
+
+      <!-- Fullscreen -->
+      <button class="ctrl-btn" onclick="toggleFullscreen()">
+        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+        <span>Full</span>
+      </button>
+    </div>
+
+    <!-- Speed row -->
+    <div id="speed-row">
+      <label>Speed:</label>
+      <button class="spd-btn" onclick="setSpeed(0.5)">0.5x</button>
+      <button class="spd-btn" onclick="setSpeed(0.75)">0.75x</button>
+      <button class="spd-btn active" id="spd-1" onclick="setSpeed(1)">1x</button>
+      <button class="spd-btn" onclick="setSpeed(1.25)">1.25x</button>
+      <button class="spd-btn" onclick="setSpeed(1.5)">1.5x</button>
+      <button class="spd-btn" onclick="setSpeed(2)">2x</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Scan box -->
+<div id="scan-box">
+  <div class="c tl"></div><div class="c tr"></div>
+  <div class="c bl"></div><div class="c br"></div>
+  <div id="scan-line"></div>
+</div>
+
+<!-- Bottom scan UI -->
+<div id="bottom-ui">
+  <div id="pills">
+    <span class="pill" id="p0">End-user Discovery</span>
+    <span class="pill" id="p1">Network Discovery</span>
+    <span class="pill" id="p2">Topology Mgmt</span>
+    <span class="pill" id="p3">Flow Management</span>
+    <span class="pill" id="p4">SDN Controller</span>
+    <span class="pill" id="p5">OpenFlow</span>
+  </div>
+  <div id="status">📷 Point camera at textbook page</div>
+</div>
+
+<script>
+const KEYWORDS=[
+  {text:'end-user',pill:'p0'},{text:'end user',pill:'p0'},
+  {text:'network device',pill:'p1'},{text:'device discovery',pill:'p1'},
+  {text:'topology',pill:'p2'},
+  {text:'flow management',pill:'p3'},
+  {text:'sdn controller',pill:'p4'},{text:'sdn',pill:'p4'},
+  {text:'openflow',pill:'p5'},
+  {text:'northbound',pill:'p4'},{text:'southbound',pill:'p4'},
+];
+const TRIGGER=2;
+
+const lbar    =document.getElementById('lbar');
+const lmsg    =document.getElementById('lmsg');
+const loading =document.getElementById('loading');
+const status  =document.getElementById('status');
+const cam     =document.getElementById('camera');
+const canvas  =document.getElementById('ocr-canvas');
+const ctx     =canvas.getContext('2d');
+const overlay =document.getElementById('ar-overlay');
+const arVid   =document.getElementById('ar-video');
+const scanBox =document.getElementById('scan-box');
+const progFill=document.getElementById('progress-fill');
+const progThumb=document.getElementById('progress-thumb');
+const timeDisp=document.getElementById('time-display');
+const playIcon=document.getElementById('play-icon');
+const pauseIcon=document.getElementById('pause-icon');
+const playLabel=document.getElementById('playpause-label');
+const volSlider=document.getElementById('vol-slider');
+
+let worker=null,busy=false,playing=false,cooldown=false,progTimer=null;
+
+// ── Format time ────────────────────────────────────────
+function fmt(s){
+  const m=Math.floor(s/60),sec=Math.floor(s%60);
+  return m+':'+(sec<10?'0':'')+sec;
+}
+
+// ── Update progress bar ────────────────────────────────
+function updateProgress(){
+  if(!arVid.duration) return;
+  const pct=(arVid.currentTime/arVid.duration)*100;
+  progFill.style.width=pct+'%';
+  progThumb.style.right=(-5)+'px';
+  progThumb.style.left='calc('+pct+'% - 6px)';
+  progThumb.style.right='unset';
+  timeDisp.textContent=fmt(arVid.currentTime)+' / '+fmt(arVid.duration);
+  // Update play/pause icon
+  if(arVid.paused){
+    playIcon.style.display=''; pauseIcon.style.display='none'; playLabel.textContent='Play';
+  } else {
+    playIcon.style.display='none'; pauseIcon.style.display=''; playLabel.textContent='Pause';
+  }
+}
+
+// ── Progress bar click/drag ────────────────────────────
+document.getElementById('progress-wrap').addEventListener('click',function(e){
+  const rect=this.getBoundingClientRect();
+  const pct=(e.clientX-rect.left)/rect.width;
+  arVid.currentTime=pct*arVid.duration;
+});
+
+// ── Volume ─────────────────────────────────────────────
+volSlider.addEventListener('input',function(){
+  arVid.volume=this.value;
+  arVid.muted=this.value==0;
+});
+
+// ── Controls ───────────────────────────────────────────
+function togglePlay(){
+  if(arVid.paused){ arVid.play().catch(()=>{}); }
+  else { arVid.pause(); }
+  setTimeout(updateProgress,50);
+}
+
+function seek(secs){
+  arVid.currentTime=Math.max(0,Math.min(arVid.duration,arVid.currentTime+secs));
+  updateProgress();
+}
+
+function setSpeed(s){
+  arVid.playbackRate=s;
+  document.querySelectorAll('.spd-btn').forEach(b=>b.classList.remove('active'));
+  const labels={'0.5':'0.5x','0.75':'0.75x','1':'1x','1.25':'1.25x','1.5':'1.5x','2':'2x'};
+  document.querySelectorAll('.spd-btn').forEach(b=>{
+    if(b.textContent===labels[String(s)]) b.classList.add('active');
+  });
+}
+
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    arVid.requestFullscreen?.() || arVid.webkitRequestFullscreen?.();
+  } else {
+    document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+  }
+}
+
+// ── Position overlay ───────────────────────────────────
+function positionOverlay(){
+  const W=window.innerWidth, H=window.innerHeight;
+  const boxW=Math.min(W*0.92,420);
+  // Video 16:9 + controls (~120px)
+  const vidH=boxW*0.5625;
+  const totalH=vidH+152;
+  const left=(W-boxW)/2;
+  const top=Math.max(10,(H-totalH)/2 - H*0.04);
+  overlay.style.left=left+'px';
+  overlay.style.top=top+'px';
+  overlay.style.width=boxW+'px';
+  overlay.style.height=totalH+'px';
+}
+
+// ── Play video ─────────────────────────────────────────
+function playVideo(){
+  playing=true;
+  scanBox.classList.add('hidden');
+  document.getElementById('bottom-ui').style.display='none';
+  positionOverlay();
+  overlay.style.display='flex';
+  overlay.style.opacity='0';
+  overlay.style.transform='scale(0.88)';
+  requestAnimationFrame(()=>{
+    overlay.style.opacity='1';
+    overlay.style.transform='scale(1)';
+  });
+  arVid.currentTime=0;
+  arVid.muted=false;
+  arVid.volume=1;
+  arVid.playbackRate=1;
+  volSlider.value=1;
+  setSpeed(1);
+  arVid.play().catch(()=>{ arVid.muted=true; arVid.play().catch(()=>{}); });
+  progTimer=setInterval(updateProgress,300);
+  status.textContent='▶️ Playing';
+  status.className='found';
+}
+
+// ── Stop video ─────────────────────────────────────────
+function stopVideo(){
+  arVid.pause();
+  clearInterval(progTimer);
+  overlay.style.opacity='0';
+  overlay.style.transform='scale(0.92)';
+  setTimeout(()=>{
+    overlay.style.display='none';
+    overlay.style.transform='scale(1)';
+  },300);
+  scanBox.classList.remove('hidden');
+  document.getElementById('bottom-ui').style.display='flex';
+  playing=false; cooldown=false;
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('lit'));
+  status.textContent='📷 Point camera at textbook page';
+  status.className='';
+}
+
+// ── Camera ─────────────────────────────────────────────
+async function startCam(){
+  lmsg.textContent='Requesting camera...'; lbar.style.width='15%';
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false
+    });
+    cam.srcObject=s;
+    await new Promise(r=>{cam.onloadedmetadata=r;});
+    lbar.style.width='35%'; lmsg.textContent='Camera ready ✅';
+    return true;
+  }catch(e){ lmsg.textContent='❌ '+e.message; return false; }
+}
+
+// ── OCR ────────────────────────────────────────────────
+async function startOCR(){
+  lmsg.textContent='Loading OCR...'; lbar.style.width='45%';
+  try{
+    worker=await Tesseract.createWorker('eng',1,{
+      logger:m=>{
+        if(m.status==='loading tesseract core'){lbar.style.width='55%';lmsg.textContent='Loading core...';}
+        if(m.status==='loading language traineddata'){lbar.style.width='72%';lmsg.textContent='Loading language...';}
+        if(m.status==='initialized api'){lbar.style.width='90%';lmsg.textContent='Almost ready...';}
+      }
+    });
+    await worker.setParameters({tessedit_pageseg_mode:'6'});
+    return true;
+  }catch(e){ lmsg.textContent='❌ '+e.message; return false; }
+}
+
+// ── Capture frame ──────────────────────────────────────
+function capture(){
+  const W=cam.videoWidth,H=cam.videoHeight;
+  if(!W||!H) return null;
+  const cx=W*0.05,cy=H*0.15,cw=W*0.90,ch=H*0.65;
+  canvas.width=Math.floor(cw); canvas.height=Math.floor(ch);
+  ctx.drawImage(cam,cx,cy,cw,ch,0,0,cw,ch);
+  const id=ctx.getImageData(0,0,canvas.width,canvas.height),d=id.data;
+  for(let i=0;i<d.length;i+=4){
+    const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    const c=g>128?Math.min(255,g*1.4):Math.max(0,g*0.6);
+    d[i]=d[i+1]=d[i+2]=c;
+  }
+  ctx.putImageData(id,0,0); return canvas;
+}
+
+// ── Keywords ───────────────────────────────────────────
+function check(text){
+  const low=text.toLowerCase();
+  const matched=new Set(),litPills=new Set();
+  KEYWORDS.forEach(kw=>{ if(low.includes(kw.text)){matched.add(kw.text);litPills.add(kw.pill);} });
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('lit'));
+  litPills.forEach(id=>{ const el=document.getElementById(id); if(el)el.classList.add('lit'); });
+  return matched.size>=TRIGGER;
+}
+
+// ── Scan loop ──────────────────────────────────────────
+function startScanning(){
+  const run=async()=>{
+    if(busy||playing||cooldown) return;
+    busy=true;
+    status.textContent='🔍 Reading text...'; status.className='reading';
+    try{
+      const frame=capture();
+      if(frame){
+        const res=await worker.recognize(frame);
+        if(check(res.data.text)){
+          status.textContent='✅ SDN page detected!'; status.className='found';
+          cooldown=true; setTimeout(playVideo,500);
+        } else {
+          status.textContent='📷 Point camera at textbook page'; status.className='';
+        }
+      }
+    }catch(e){ console.error(e); }
+    busy=false;
+  };
+  run(); setInterval(run,2500);
+}
+
+// ── Init ───────────────────────────────────────────────
+async function init(){
+  if(!await startCam()) return;
+  if(!await startOCR()) return;
+  lbar.style.width='100%'; lmsg.textContent='✅ Ready!';
+  setTimeout(()=>{ loading.style.display='none'; startScanning(); },600);
+}
+
+window.addEventListener('resize',()=>{ if(playing) positionOverlay(); });
+init();
+</script>
+</body>
+</html>
