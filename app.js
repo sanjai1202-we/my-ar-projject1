@@ -1,104 +1,126 @@
-// ======================================================================
-// CONFIGURATION
-// ======================================================================
-const AR_CONTENT = [
-    { videoSrc: './assets/video.mp4', height: 0.5625 },
-];
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>WebAR Transparent</title>
 
-/**
- * Video Controller Component
- * Handles play/pause logic with a "grace period" to prevent flickering
- * when tracking is temporarily lost (e.g., partial occlusion).
- */
-AFRAME.registerComponent('video-controller', {
-    schema: {
-        videoSelector: { type: 'string', default: '' },
-        gracePeriod: { type: 'number', default: 500 } // Time in ms before pausing
-    },
-    init: function () {
-        if (!this.data.videoSelector) return;
-        this.videoEl = document.querySelector(this.data.videoSelector);
-        this.lossTimeout = null;
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-        // Bind functions
-        this.onTargetFound = this.onTargetFound.bind(this);
-        this.onTargetLost = this.onTargetLost.bind(this);
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
 
-        // Events
-        this.el.addEventListener('targetFound', this.onTargetFound);
-        this.el.addEventListener('targetLost', this.onTargetLost);
-    },
+a-scene {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: transparent !important;
+}
 
-    onTargetFound: function () {
-        // If we were about to pause, CANCEL it!
-        if (this.lossTimeout) {
-            clearTimeout(this.lossTimeout);
-            this.lossTimeout = null;
-        }
+.instruction-container {
+  position: fixed;
+  bottom: 30px;
+  width: 100%;
+  text-align: center;
+  z-index: 999;
+  pointer-events: none;
+}
 
-        if (this.videoEl) {
-            this.videoEl.muted = false;
-            // Only play if not already playing to avoid stutters
-            if (this.videoEl.paused) {
-                this.videoEl.play().catch(e => console.warn("Autoplay blocked:", e));
-            }
-        }
-    },
+.instruction-text {
+  font-size: 1rem;
+  color: #4facfe;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1px solid #4facfe;
+  display: inline-block;
+  text-transform: uppercase;
+}
+</style>
+</head>
 
-    onTargetLost: function () {
-        // Don't pause immediately. Wait a moment to see if it comes back.
-        // This handles the "1/2 image" case where tracking might flicker.
-        this.lossTimeout = setTimeout(() => {
-            if (this.videoEl) {
-                this.videoEl.pause();
-            }
-        }, this.data.gracePeriod);
-    },
+<body>
 
-    remove: function () {
-        this.el.removeEventListener('targetFound', this.onTargetFound);
-        this.el.removeEventListener('targetLost', this.onTargetLost);
-    }
+<div class="instruction-container" id="instruction-container">
+  <div class="instruction-text">
+    Point camera at image
+  </div>
+</div>
+
+<a-scene
+  mindar-image="imageTargetSrc: ./targets.mind; uiScanning: no; uiLoading: no;"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  renderer="colorManagement: true; alpha: true;"
+  color-space="sRGB">
+
+  <a-assets>
+    <video id="ar-video"
+      src="./video.mp4"
+      preload="auto"
+      loop
+      playsinline
+      webkit-playsinline
+      crossorigin="anonymous">
+    </video>
+  </a-assets>
+
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+  <a-entity mindar-image-target="targetIndex: 0" id="target">
+    <a-video
+      src="#ar-video"
+      width="0.5625"
+      height="1"
+      position="0 0 0">
+    </a-video>
+  </a-entity>
+
+</a-scene>
+
+<script>
+const video = document.getElementById('ar-video');
+const target = document.getElementById('target');
+const instruction = document.getElementById('instruction-container');
+
+let visible = false;
+
+// Mobile autoplay fix
+video.muted = true;
+video.setAttribute("playsinline", "");
+video.setAttribute("webkit-playsinline", "");
+
+// When image detected
+target.addEventListener('targetFound', () => {
+  visible = true;
+  instruction.style.display = "none";
+  video.play().catch(() => {});
 });
 
-/**
- * Scene Generator Component
- * Procedurally generates AR targets and assets from the config.
- */
-AFRAME.registerComponent('scene-generator', {
-    init: function () {
-        const assetsContainer = document.querySelector('a-assets');
-        const sceneEl = this.el;
-
-        AR_CONTENT.forEach((item, index) => {
-            const videoId = `video-${index}`;
-
-            // 1. Create Video Asset
-            const videoEl = document.createElement('video');
-            videoEl.setAttribute('id', videoId);
-            videoEl.setAttribute('src', item.videoSrc);
-            videoEl.setAttribute('preload', 'auto');
-            videoEl.setAttribute('loop', 'true');
-            videoEl.setAttribute('playsinline', 'true');
-            videoEl.setAttribute('webkit-playsinline', 'true');
-            videoEl.setAttribute('crossorigin', 'anonymous');
-            assetsContainer.appendChild(videoEl);
-
-            // 2. Create AR Target Entity
-            const targetEl = document.createElement('a-entity');
-            targetEl.setAttribute('mindar-image-target', `targetIndex: ${index}`);
-            targetEl.setAttribute('video-controller', `videoSelector: #${videoId}`);
-
-            // 3. Create Video Overlay Plane
-            const aVideoEl = document.createElement('a-video');
-            aVideoEl.setAttribute('src', `#${videoId}`);
-            aVideoEl.setAttribute('width', '1');
-            aVideoEl.setAttribute('height', item.height);
-            // Center it
-            aVideoEl.setAttribute('position', '0 0 0');
-
-            targetEl.appendChild(aVideoEl);
-            sceneEl.appendChild(targetEl);
-        });
-    }
+// When image lost
+target.addEventListener('targetLost', () => {
+  visible = false;
+  instruction.style.display = "block";
+  video.pause();
 });
+
+// Unlock audio after tap
+document.addEventListener("click", () => {
+  if (visible) {
+    video.muted = false;
+    video.play().catch(() => {});
+  }
+});
+</script>
+
+</body>
+</html>
